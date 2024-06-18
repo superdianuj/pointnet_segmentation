@@ -1,6 +1,9 @@
 # PointNet Segmentation on S3DIS Dataset
 [Dataset](http://buildingparser.stanford.edu/dataset.html)
 
+## Requirements
+. Pytorch with your favourite cuda
+. Open3D
 
 
 ```bash
