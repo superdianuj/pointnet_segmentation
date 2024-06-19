@@ -8,7 +8,7 @@
 
 ```bash
 cd s3dis_dataset_visualization
-python s3dis_reducer
+python s3dis_reducer.py
 cd ..
 cd pointnet
 python main_segment.py
