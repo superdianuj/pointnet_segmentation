@@ -10,6 +10,6 @@
 cd s3dis_dataset_visualization
 python s3dis_reducer.py
 cd ..
-cd pointnet
+cd point_net
 python main_segment.py
 ```
