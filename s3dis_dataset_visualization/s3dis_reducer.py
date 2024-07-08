@@ -9,13 +9,10 @@ import open3d as o3
 
 
 
-
-
-
-
-ROOT=r'/home/kann/codework/test_pointnet_seg/3D/point_net/Stanford3dDataset_v1.2_Aligned_Version'
-SAVE_PATH = r'/home/kann/codework/test_pointnet_seg/3D/point_net/Stanford3dDataset_v1.2_Reduced_Aligned_Version'
-PARTITION_SAVE_PATH = r'/home/kann/codework/test_pointnet_seg/3D/point_net/Stanford3dDataset_v1.2_Reduced_Partitioned_Aligned_Version'
+curr_dir=os.cwd()
+ROOT=os.path.join(curr_dir,'point_net/Stanford3dDataset_v1.2_Aligned_Version')
+SAVE_PATH = os.path.join(curr_dir,'point_net/Stanford3dDataset_v1.2_Reduced_Aligned_Version')
+PARTITION_SAVE_PATH = os.path.join(curr_dir,'point_net/Stanford3dDataset_v1.2_Reduced_Partitioned_Aligned_Version')
 
 if not os.path.exists(SAVE_PATH):
     os.mkdir(SAVE_PATH)
@@ -219,9 +216,5 @@ for area in area_dict:
 
 toc = time.time()
 print(toc - tic)
-
-save_path='/home/kann/codework/test_pointnet_seg/3D/point_net/Stanford3dDataset_v1.2_Reduced_Aligned_Version/Area_1/office_20.hdf5'
-space_data = pd.read_hdf(save_path, key='space_slice').to_numpy()
-print(space_data)
 
 

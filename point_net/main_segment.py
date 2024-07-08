@@ -21,8 +21,10 @@ warnings.filterwarnings("ignore")
 
 
 # dataset
-ROOT = r'/home/kann/codework/test_pointnet_seg/3D/point_net/Stanford3dDataset_v1.2_Reduced_Partitioned_Aligned_Version'
+curr_dir=os.getcwd()
+ROOT = os.path.join(curr_dir,'point_net/Stanford3dDataset_v1.2_Reduced_Partitioned_Aligned_Version')
 
+# feature selection hyperparameters
 # feature selection hyperparameters
 NUM_TRAIN_POINTS = 4096 # train/valid points
 NUM_TEST_POINTS = 15000
@@ -76,19 +78,17 @@ from s3dis_dataset import S3DIS
 # get datasets
 s3dis_train = S3DIS(ROOT, area_nums='1-4', npoints=NUM_TRAIN_POINTS, r_prob=0.25)
 s3dis_valid = S3DIS(ROOT, area_nums='5', npoints=NUM_TRAIN_POINTS, r_prob=0.)
-s3dis_test = S3DIS(ROOT, area_nums='6', split='test', npoints=NUM_TEST_POINTS)
+s3dis_test = S3DIS(ROOT, area_nums='5', npoints=NUM_TEST_POINTS)
 
 # get dataloaders
 train_dataloader = DataLoader(s3dis_train, batch_size=BATCH_SIZE, shuffle=True)
 valid_dataloader = DataLoader(s3dis_valid, batch_size=BATCH_SIZE, shuffle=True)
 test_dataloader = DataLoader(s3dis_test, batch_size=BATCH_SIZE, shuffle=False)
 
-points, targets = s3dis_train[100]
+points, targets = s3dis_train[1]
 
 points,targets=next(iter(train_dataloader))
 
-print("Points Shape: ",points.shape)
-print("Targets Shape: ",targets.shape)
 
 
 # draw(pcd)
@@ -268,15 +268,10 @@ for epoch in range(1, EPOCHS + 1):
         # pause to cool down
         time.sleep(4)
 
-    # save best models
-    if valid_iou[-1] >= best_iou:
-        best_iou = valid_iou[-1]
-        torch.save(seg_model.state_dict(), f'trained_models/seg_focal_dice_iou_rot_clr/seg_model_{epoch}.pth')
-
-
-torch.save(seg_model.state_dict(), f'lesbian.pth')
+    
+torch.save(seg_model.state_dict(), f'final_model.pth')
 model=PointNetSegHead(num_points=NUM_TEST_POINTS,m=NUM_CLASSES).to(DEVICE)
-model.load_state_dict(torch.load('lesbian.pth'))
+model.load_state_dict(torch.load('final_model.pth'))
 model.eval()
 #model=seg_model
 
@@ -284,22 +279,16 @@ torch.cuda.empty_cache() # release GPU memory
 points, targets = next(iter(test_dataloader))
 # points,targets=points[0:1],targets[0:1]
 
-# place on device
+
 points = points.to(DEVICE)
 targets = targets.to(DEVICE)
 
-print(points.shape)
-print(targets.shape)
 
 
 # Normalize each partitioned Point Cloud to (0, 1)
 norm_points = points.clone()
 norm_points = norm_points - norm_points.min(axis=1)[0].unsqueeze(1)
 norm_points /= norm_points.max(axis=1)[0].unsqueeze(1)
-print(norm_points.shape)
-
-
-
 
 with torch.no_grad():
 
@@ -331,3 +320,74 @@ pcd = o3.geometry.PointCloud()
 pcd.points = o3.utility.Vector3dVector(points.permute(2, 0, 1).reshape(3, -1).to('cpu').T)
 pcd.colors = o3.utility.Vector3dVector(np.vstack(v_map_colors(pred_choice.reshape(-1).to('cpu'))).T/255)
 o3.io.write_point_cloud('full_predicted.ply', pcd)
+
+file_path='scan0.ptx'
+import math
+
+with open(file_path,'r') as file:
+    for _ in range(12):
+        file.readline()
+
+    points=[]
+    colors=[]
+
+    for line in file:
+        parts=line.strip().split()
+        if len(parts)==7:
+            x,y,z,intensity,r,g,b=map(float,parts)
+            points.append([x,y,z])
+            colors.append([r/255.0,g/255.0,b/255.0])
+
+points,colors=np.array(points),np.array(colors)
+pcd=o3.geometry.PointCloud()
+pcd.points=o3.utility.Vector3dVector(points)
+pcd.colors=o3.utility.Vector3dVector(colors)
+o3.io.write_point_cloud('reference_scan.ply', pcd)
+
+points=torch.tensor(points)
+second_dim=15000*3
+NUM_TEST_POINTS=second_dim
+model=PointNetSegHead(num_points=NUM_TEST_POINTS,m=NUM_CLASSES).to(DEVICE)
+model.load_state_dict(torch.load('final_model.pth'))
+model.eval()
+bs=(len(points)//second_dim)
+Ps=[]
+for i in range(bs):
+    if i<bs:
+        Ps.append(points[i*second_dim:(i+1)*second_dim])
+Ps=torch.stack(Ps).float()
+# Normalize each partitioned Point Cloud to (0, 1)
+norm_points = Ps.clone()
+norm_points = norm_points - norm_points.min(axis=1)[0].unsqueeze(1)
+norm_points /= norm_points.max(axis=1)[0].unsqueeze(1)
+
+p_choice=[]
+mini_bs=32
+with torch.no_grad():
+    for i in range(bs//mini_bs+1):
+        print(i)
+        if i<bs//mini_bs:
+            n_points=norm_points[i*mini_bs:(i+1)*mini_bs]
+        else:
+            n_points=norm_points[i*mini_bs:]
+        # prepare data
+        n_points = n_points.transpose(2, 1)
+        # targets = targets.squeeze()
+        # run inference
+        preds, _, _ = model(n_points.cuda())
+
+        # get metrics
+        pred_choice = torch.softmax(preds, dim=2).argmax(dim=2)
+        p_choice.append(pred_choice)
+        torch.cuda.empty_cache()
+
+pred_choice=torch.cat(p_choice)
+colors=(np.vstack(v_map_colors(pred_choice.reshape(-1).to('cpu'))).T)/255
+ps=points[:Ps.shape[0]*Ps.shape[1]]
+pcd = o3.geometry.PointCloud()
+pcd.points = o3.utility.Vector3dVector(ps)
+pcd.colors = o3.utility.Vector3dVector(colors)
+o3.io.write_point_cloud('predicted_on_scan.ply', pcd)
+
+
+
