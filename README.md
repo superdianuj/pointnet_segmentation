@@ -23,6 +23,7 @@ python main_segment.py
         <img src="groundtruth.png" alt="Ground Truth Point Cloud" style="width: 90%;">
         <figcaption>Ground Truth</figcaption>
     </figure>
+    <br>
     <figure>
         <img src="predicted.png" alt="Predicted Point Cloud" style="width: 90%;">
         <figcaption>Predicted</figcaption>
