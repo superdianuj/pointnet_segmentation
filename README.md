@@ -24,6 +24,8 @@ python main_segment.py
         <figcaption>Ground Truth</figcaption>
     </figure>
     <br>
+    <br>
+    <br>
     <figure>
         <img src="predicted.png" alt="Predicted Point Cloud" style="width: 90%;">
         <figcaption>Predicted</figcaption>
