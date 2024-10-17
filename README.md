@@ -8,8 +8,11 @@ Also for testing on new scan (much different than dataset), I suggest to downloa
 * Open3D
 
 
+
+
+## Instructions
+
 ```bash
-cd s3dis_dataset_visualization
 python s3dis_reducer.py
 cd ..
 cd point_net
