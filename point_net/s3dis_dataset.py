@@ -15,6 +15,7 @@ from torch.utils.data import Dataset
 
 class S3DIS(Dataset):
     def __init__(self, root, area_nums, split='train', npoints=4096, r_prob=0.25):
+        area_nums=[1,2,3,4,5]
         self.root = root
         self.area_nums = area_nums # i.e. '1-4' # areas 1-4
         self.split = split.lower() # use 'test' in order to bypass augmentations
@@ -22,8 +23,12 @@ class S3DIS(Dataset):
         self.r_prob = r_prob       # probability of rotation
 
         # glob all hdf paths
-        areas = glob(os.path.join(root, f'Area_[{area_nums}]*'))
-
+        # print(root)
+        areas=[]
+        for a_num in area_nums:
+            areas.append(os.path.join(root, f'Area_{a_num}'))
+        # print(areas)
+        
         # check that datapaths are valid, if not raise error
         if len(areas) == 0:
             raise FileNotFoundError("NO VALID FILEPATHS FOUND!")
@@ -35,22 +40,27 @@ class S3DIS(Dataset):
         # get all datapaths
         self.data_paths = []
         for area in areas:
-            self.data_paths += glob(os.path.join(area, '**\*.hdf5'), 
-                                    recursive=True)
+            self.data_paths += glob(os.path.join(area, '**/*.hdf5'),recursive=True)
+
+        
 
         # get unique space identifiers (area_##\\spacename_##_)
         self.space_ids = []
         for fp in self.data_paths:
-            area, space = fp.split('\\')[-2:]
-            space_id = '\\'.join([area, '_'.join(space.split('_')[:2])]) + '_'
+            area, space = fp.split('/')[-2:]
+            space_id = '/'.join([area, '_'.join(space.split('_')[:2])]) + '_'
+            # print(space_id)
+            # print("=====")
             self.space_ids.append(space_id)
 
         self.space_ids = list(set(self.space_ids))
 
-
+        
     def __getitem__(self, idx):
-        # read data from hdf5
+        # print(self.data_paths)
+        # read data from h
         space_data = pd.read_hdf(self.data_paths[idx], key='space_slice').to_numpy()
+    
         points = space_data[:, :3] # xyz points
         targets = space_data[:, 3]    # integer categories
 
