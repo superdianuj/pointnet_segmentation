@@ -18,18 +18,21 @@ import matplotlib.pyplot as plt
 
 import warnings
 warnings.filterwarnings("ignore")
-
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 # dataset
 curr_dir=os.getcwd()
-ROOT = os.path.join(curr_dir,'point_net/Stanford3dDataset_v1.2_Reduced_Partitioned_Aligned_Version')
+ROOT = os.path.join(curr_dir,'Stanford3dDataset_v1.2_Reduced_Partitioned_Aligned_Version')
+
+if not os.path.exists('trained_models'):
+    os.mkdir('trained_models')
 
 # feature selection hyperparameters
 # feature selection hyperparameters
 NUM_TRAIN_POINTS = 4096 # train/valid points
 NUM_TEST_POINTS = 15000
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 
 CATEGORIES = {
     'ceiling'  : 0,
@@ -106,8 +109,8 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 import torch.optim as optim
 from point_net_loss import PointNetSegLoss
 
-EPOCHS = 0
-LR = 0.0001
+EPOCHS = 1000
+LR = 0.00005
 
 # use inverse class weighting
 # alpha = 1 / class_bins
@@ -268,126 +271,24 @@ for epoch in range(1, EPOCHS + 1):
         # pause to cool down
         time.sleep(4)
 
-    
-torch.save(seg_model.state_dict(), f'final_model.pth')
-model=PointNetSegHead(num_points=NUM_TEST_POINTS,m=NUM_CLASSES).to(DEVICE)
-model.load_state_dict(torch.load('final_model.pth'))
-model.eval()
-#model=seg_model
 
-torch.cuda.empty_cache() # release GPU memory
-points, targets = next(iter(test_dataloader))
-# points,targets=points[0:1],targets[0:1]
+    if epoch%50==0:
+        torch.save(seg_model.state_dict(), f'trained_models/model_epoch_{epoch}.pth')
 
 
-points = points.to(DEVICE)
-targets = targets.to(DEVICE)
+if os.path.exists('score_data'):
+    os.sys('rm -rf score_data')
 
+os.mkdir('score_data')
+torch.save(train_loss, 'score_data/train_loss.pth')
+torch.save(train_accuracy, 'score_data/train_accuracy.pth')
+torch.save(train_iou, 'score_data/train_iou.pth')
+torch.save(train_mcc, 'score_data/train_mcc.pth')
+torch.save(valid_loss, 'score_data/valid_loss.pth')
+torch.save(valid_accuracy, 'score_data/valid_accuracy.pth')
+torch.save(valid_iou, 'score_data/valid_iou.pth')
+torch.save(valid_mcc, 'score_data/valid_mcc.pth')
 
-
-# Normalize each partitioned Point Cloud to (0, 1)
-norm_points = points.clone()
-norm_points = norm_points - norm_points.min(axis=1)[0].unsqueeze(1)
-norm_points /= norm_points.max(axis=1)[0].unsqueeze(1)
-
-with torch.no_grad():
-
-    # prepare data
-    norm_points = norm_points.transpose(2, 1)
-    targets = targets.squeeze()
-
-    # run inference
-    preds, _, _ = model(norm_points)
-
-    # get metrics
-    pred_choice = torch.softmax(preds, dim=2).argmax(dim=2)
-
-    loss = criterion(preds, targets, pred_choice)
-    correct = pred_choice.eq(targets.data).cpu().sum()
-    accuracy = correct/float(points.shape[0]*NUM_TEST_POINTS)
-    mcc = mcc_metric(preds.transpose(2, 1), targets)
-    iou = compute_iou(targets, pred_choice)
-
-print(f'Loss: {loss:.4f} - Accuracy: {accuracy:.4f} - MCC: {mcc:.4f} - IOU: {iou:.4f}')
-
-
-pcd = o3.geometry.PointCloud()
-pcd.points = o3.utility.Vector3dVector(points.permute(2, 0, 1).reshape(3, -1).to('cpu').T)
-pcd.colors = o3.utility.Vector3dVector(np.vstack(v_map_colors(targets.reshape(-1).to('cpu'))).T/255)
-o3.io.write_point_cloud('ground_truth.ply',pcd)
-
-pcd = o3.geometry.PointCloud()
-pcd.points = o3.utility.Vector3dVector(points.permute(2, 0, 1).reshape(3, -1).to('cpu').T)
-pcd.colors = o3.utility.Vector3dVector(np.vstack(v_map_colors(pred_choice.reshape(-1).to('cpu'))).T/255)
-o3.io.write_point_cloud('full_predicted.ply', pcd)
-
-file_path='scan0.ptx'
-import math
-
-with open(file_path,'r') as file:
-    for _ in range(12):
-        file.readline()
-
-    points=[]
-    colors=[]
-
-    for line in file:
-        parts=line.strip().split()
-        if len(parts)==7:
-            x,y,z,intensity,r,g,b=map(float,parts)
-            points.append([x,y,z])
-            colors.append([r/255.0,g/255.0,b/255.0])
-
-points,colors=np.array(points),np.array(colors)
-pcd=o3.geometry.PointCloud()
-pcd.points=o3.utility.Vector3dVector(points)
-pcd.colors=o3.utility.Vector3dVector(colors)
-o3.io.write_point_cloud('reference_scan.ply', pcd)
-
-points=torch.tensor(points)
-second_dim=15000*3
-NUM_TEST_POINTS=second_dim
-model=PointNetSegHead(num_points=NUM_TEST_POINTS,m=NUM_CLASSES).to(DEVICE)
-model.load_state_dict(torch.load('final_model.pth'))
-model.eval()
-bs=(len(points)//second_dim)
-Ps=[]
-for i in range(bs):
-    if i<bs:
-        Ps.append(points[i*second_dim:(i+1)*second_dim])
-Ps=torch.stack(Ps).float()
-# Normalize each partitioned Point Cloud to (0, 1)
-norm_points = Ps.clone()
-norm_points = norm_points - norm_points.min(axis=1)[0].unsqueeze(1)
-norm_points /= norm_points.max(axis=1)[0].unsqueeze(1)
-
-p_choice=[]
-mini_bs=32
-with torch.no_grad():
-    for i in range(bs//mini_bs+1):
-        print(i)
-        if i<bs//mini_bs:
-            n_points=norm_points[i*mini_bs:(i+1)*mini_bs]
-        else:
-            n_points=norm_points[i*mini_bs:]
-        # prepare data
-        n_points = n_points.transpose(2, 1)
-        # targets = targets.squeeze()
-        # run inference
-        preds, _, _ = model(n_points.cuda())
-
-        # get metrics
-        pred_choice = torch.softmax(preds, dim=2).argmax(dim=2)
-        p_choice.append(pred_choice)
-        torch.cuda.empty_cache()
-
-pred_choice=torch.cat(p_choice)
-colors=(np.vstack(v_map_colors(pred_choice.reshape(-1).to('cpu'))).T)/255
-ps=points[:Ps.shape[0]*Ps.shape[1]]
-pcd = o3.geometry.PointCloud()
-pcd.points = o3.utility.Vector3dVector(ps)
-pcd.colors = o3.utility.Vector3dVector(colors)
-o3.io.write_point_cloud('predicted_on_scan.ply', pcd)
 
 
 
