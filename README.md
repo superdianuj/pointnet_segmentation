@@ -18,9 +18,9 @@ Also for testing on new scan (much different than dataset), I suggest to downloa
 
 ### Main Training
 ```bash
+cd point_net
 # convert the S3DIS dataset into hd5 format
 python s3dis_reducer.py
-cd point_net
 # train the pointnet on training and validation data of S3DIS
 python main_train.py
 # test pointnet on testing data of S3DIS
@@ -41,11 +41,13 @@ python pointclouds_2_png.py
 
 # compare the ground truth and predictions of testing S3DIS dataset over epochs, in single png
 python compare_png.py
+cd ..
 ```
 
 
 ### Testing on Unseen Data
 ```bash
+cd point_net
 python test_new.py --path <path to .ptx file>
 ```
 
